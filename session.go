@@ -3,10 +3,8 @@ package session_buntdb
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"os"
 	"path"
-	"strconv"
 	"sync"
 	"time"
 
@@ -88,14 +86,14 @@ func (this *buntdbConnect) Close() error {
 }
 
 // 查询会话，
-func (this *buntdbConnect) Read(key string) ([]byte, error) {
+func (this *buntdbConnect) Read(id string) ([]byte, error) {
 	if this.db == nil {
 		return nil, errInvalidSessionConnection
 	}
 
 	value := ""
 	err := this.db.View(func(tx *buntdb.Tx) error {
-		vvv, err := tx.Get(key)
+		vvv, err := tx.Get(id)
 		if err != nil {
 			return err
 		}
@@ -114,7 +112,7 @@ func (this *buntdbConnect) Read(key string) ([]byte, error) {
 }
 
 // 更新会话
-func (this *buntdbConnect) Write(key string, data []byte, expiry time.Duration) error {
+func (this *buntdbConnect) Write(id string, data []byte, expiry time.Duration) error {
 	if this.db == nil {
 		return errInvalidSessionConnection
 	}
@@ -130,19 +128,19 @@ func (this *buntdbConnect) Write(key string, data []byte, expiry time.Duration) 
 			opts.Expires = true
 			opts.TTL = expiry
 		}
-		_, _, err := tx.Set(key, value, opts)
+		_, _, err := tx.Set(id, value, opts)
 		return err
 	})
 }
 
 // 查询会话，
-func (this *buntdbConnect) Exists(key string) (bool, error) {
+func (this *buntdbConnect) Exists(id string) (bool, error) {
 	if this.db == nil {
 		return false, errInvalidSessionConnection
 	}
 
 	err := this.db.View(func(tx *buntdb.Tx) error {
-		_, err := tx.Get(key)
+		_, err := tx.Get(id)
 		return err
 	})
 	if err != nil {
@@ -154,37 +152,15 @@ func (this *buntdbConnect) Exists(key string) (bool, error) {
 }
 
 // 删除会话
-func (this *buntdbConnect) Delete(key string) error {
+func (this *buntdbConnect) Delete(id string) error {
 	if this.db == nil {
 		return errInvalidSessionConnection
 	}
 
 	return this.db.Update(func(tx *buntdb.Tx) error {
-		_, err := tx.Delete(key)
+		_, err := tx.Delete(id)
 		return err
 	})
-}
-
-func (this *buntdbConnect) Sequence(key string, start, step int64, expiry time.Duration) (int64, error) {
-	value := start
-
-	if data, err := this.Read(key); err == nil {
-		num, err := strconv.ParseInt(string(data), 10, 64)
-		if err == nil {
-			value = num
-		}
-	}
-	//加数字
-	value += step
-
-	//写入值
-	data := []byte(fmt.Sprintf("%v", value))
-	err := this.Write(key, data, expiry)
-	if err != nil {
-		return int64(0), err
-	}
-
-	return value, nil
 }
 
 func (this *buntdbConnect) Clear(prefix string) error {
@@ -192,14 +168,14 @@ func (this *buntdbConnect) Clear(prefix string) error {
 		return errors.New("连接失败")
 	}
 
-	keys, err := this.Keys(prefix)
+	ids, err := this.Keys(prefix)
 	if err != nil {
 		return err
 	}
 
 	return this.db.Update(func(tx *buntdb.Tx) error {
-		for _, key := range keys {
-			_, err := tx.Delete(key)
+		for _, id := range ids {
+			_, err := tx.Delete(id)
 			if err != nil {
 				return err
 			}
@@ -212,10 +188,10 @@ func (this *buntdbConnect) Keys(prefix string) ([]string, error) {
 		return nil, errors.New("连接失败")
 	}
 
-	keys := []string{}
+	ids := []string{}
 	err := this.db.View(func(tx *buntdb.Tx) error {
 		tx.AscendKeys(prefix+"*", func(k, v string) bool {
-			keys = append(keys, k)
+			ids = append(ids, k)
 			return true
 		})
 
@@ -225,5 +201,5 @@ func (this *buntdbConnect) Keys(prefix string) ([]string, error) {
 		return nil, err
 	}
 
-	return keys, nil
+	return ids, nil
 }
